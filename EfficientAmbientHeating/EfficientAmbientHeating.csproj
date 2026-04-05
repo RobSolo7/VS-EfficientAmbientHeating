@@ -1,0 +1,39 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <AssemblyName>EfficientAmbientHeating</AssemblyName>
+    <RootNamespace>EfficientAmbientHeating</RootNamespace>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Core API: ModSystem, BlockEntityBehavior, ICoreServerAPI, etc.
+         Private=false: the game provides these at runtime; don't bundle in the mod zip. -->
+    <Reference Include="VintagestoryAPI">
+      <HintPath>$(APPDATA)\Vintagestory1.22\VintagestoryAPI.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <!-- Game library: BlockEntityFirepit, BlockEntityStove, etc. -->
+    <Reference Include="VintagestoryLib">
+      <HintPath>$(APPDATA)\Vintagestory1.22\VintagestoryLib.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <!-- VSEssentials: RoomRegistry lives here -->
+    <Reference Include="VSEssentials">
+      <HintPath>$(APPDATA)\Vintagestory1.22\Mods\VSEssentials.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Update="modinfo.json">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </None>
+    <None Update="assets\**\*">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </None>
+  </ItemGroup>
+
+</Project>

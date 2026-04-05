@@ -1,0 +1,8 @@
+[
+  {
+    "op": "add",
+    "path": "/entityBehaviors/-",
+    "file": "game:blocktypes/stone/firepit.json",
+    "value": { "name": "EfficientHeating" }
+  }
+]
