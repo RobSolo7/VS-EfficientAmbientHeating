@@ -2,13 +2,7 @@
   {
     "op": "add",
     "path": "/entityBehaviors/-",
-    "file": "game:blocktypes/clay/claystove.json",
-    "value": { "name": "EfficientHeating" }
-  },
-  {
-    "op": "add",
-    "path": "/entityBehaviors/-",
-    "file": "game:blocktypes/metal/ironstove.json",
+    "file": "survival:blocktypes/legacy/stove.json",
     "value": { "name": "EfficientHeating" }
   }
 ]
