@@ -1,0 +1,11 @@
+{
+  "type": "code",
+  "modid": "efficientheating",
+  "name": "Efficient Ambient Heating",
+  "authors": [ "RobSolo" ],
+  "description": "Heat sources burn fuel more slowly when idle inside an enclosed room. No effect during cooking or smelting.",
+  "version": "1.0.0",
+  "dependencies": {
+    "game": ">=1.19.0"
+  }
+}
