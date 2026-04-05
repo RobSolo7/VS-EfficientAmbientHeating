@@ -1,8 +1,0 @@
-[
-  {
-    "op": "add",
-    "path": "/entityBehaviors/-",
-    "file": "survival:blocktypes/wood/firepit.json",
-    "value": { "name": "EfficientHeating" }
-  }
-]

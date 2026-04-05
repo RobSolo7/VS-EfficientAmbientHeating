@@ -1,8 +1,0 @@
-[
-  {
-    "op": "add",
-    "path": "/entityBehaviors/-",
-    "file": "survival:blocktypes/legacy/stove.json",
-    "value": { "name": "EfficientHeating" }
-  }
-]
