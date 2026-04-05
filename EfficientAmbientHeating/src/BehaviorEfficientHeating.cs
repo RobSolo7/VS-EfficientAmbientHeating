@@ -108,13 +108,14 @@ public class BehaviorEfficientHeating : BlockEntityBehavior
 
         dsc.AppendLine();
         dsc.AppendLine($"[EfficientHeating on {Blockentity.GetType().Name}]");
+        dsc.AppendLine($"  Room check pos: {Blockentity.Pos.UpCopy()}");
         if (!burning)
         {
             dsc.AppendLine("  Status: not burning");
         }
         else if (!inRoom)
         {
-            dsc.AppendLine("  Status: no enclosed room detected — no bonus");
+            dsc.AppendLine("  Status: no enclosed room at pos above — no bonus");
         }
         else if (cooking)
         {
@@ -131,7 +132,10 @@ public class BehaviorEfficientHeating : BlockEntityBehavior
         var roomRegistry = sapi!.ModLoader.GetModSystem<RoomRegistry>();
         if (roomRegistry == null) return false;
 
-        var room = roomRegistry.GetRoomForPosition(Blockentity.Pos);
+        // The heater is a solid block — the room registry tracks air spaces.
+        // Check the block directly above the heater (the air the flame occupies).
+        var checkPos = Blockentity.Pos.UpCopy();
+        var room = roomRegistry.GetRoomForPosition(checkPos);
         return room != null && room.ExitCount == 0;
     }
 
