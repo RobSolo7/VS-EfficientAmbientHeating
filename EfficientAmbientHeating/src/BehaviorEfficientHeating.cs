@@ -1,5 +1,6 @@
 using System;
 using System.Reflection;
+using System.Text;
 using Vintagestory.API.Common;
 using Vintagestory.API.Datastructures;
 using Vintagestory.API.Server;
@@ -22,6 +23,10 @@ public class BehaviorEfficientHeating : BlockEntityBehavior
     private FieldInfo? fuelBurnTimeField;
     private FieldInfo? maxFuelBurnTimeField;
 
+    // Tracks whether this heater is currently providing the efficiency bonus,
+    // so the plant display behavior can detect it without re-scanning each frame.
+    private bool isProvidingBonus;
+
     public BehaviorEfficientHeating(BlockEntity blockentity) : base(blockentity) { }
 
     public override void Initialize(ICoreAPI api, JsonObject properties)
@@ -32,8 +37,6 @@ public class BehaviorEfficientHeating : BlockEntityBehavior
 
         sapi = (ICoreServerAPI)api;
 
-        // Resolve fuelBurnTime field on the concrete block entity type.
-        // Checks both public and non-public fields so it works across VS versions.
         var flags = BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance;
         fuelBurnTimeField    = Blockentity.GetType().GetField("fuelBurnTime",    flags);
         maxFuelBurnTimeField = Blockentity.GetType().GetField("maxFuelBurnTime", flags);
@@ -45,7 +48,6 @@ public class BehaviorEfficientHeating : BlockEntityBehavior
             return;
         }
 
-        // Tick every second. dt will be elapsed ms since last call.
         tickListenerId = api.Event.RegisterGameTickListener(OnServerTick, 1000);
     }
 
@@ -54,23 +56,31 @@ public class BehaviorEfficientHeating : BlockEntityBehavior
         if (fuelBurnTimeField == null || sapi == null) return;
 
         float burnTime = (float)(fuelBurnTimeField.GetValue(Blockentity) ?? 0f);
-        if (burnTime <= 0f) return;       // Not burning — nothing to slow down.
-
-        if (!IsInValidRoom()) return;     // No enclosure bonus.
-        if (IsActivelyUsed()) return;     // Cooking or smelting — run at normal speed.
+        bool burning      = burnTime > 0f;
+        bool inRoom       = burning && IsInValidRoom();
+        bool cooking      = inRoom  && IsActivelyUsed();
 
         var mod = sapi.ModLoader.GetModSystem<EfficientHeatingMod>();
-        float multiplier = mod?.Config?.BurnTimeMultiplier ?? 2f;
-        if (multiplier <= 1f) return;
+        float multiplier  = mod?.Config?.BurnTimeMultiplier ?? 2f;
 
-        // Refund a fraction of the second that just elapsed.
-        // At 2x multiplier: refund 0.5 s/s → net consumption = 0.5 s/s → fuel lasts 2x.
-        // dt is in milliseconds; divide by 1000 to get seconds.
+        bool shouldProvide = burning && inRoom && !cooking && multiplier > 1f;
+
+        // Update the module-level registry so plant blocks can read it.
+        if (mod != null)
+        {
+            if (shouldProvide)
+                mod.ActiveHeaterPositions.Add(Blockentity.Pos);
+            else
+                mod.ActiveHeaterPositions.Remove(Blockentity.Pos);
+        }
+
+        isProvidingBonus = shouldProvide;
+
+        if (!shouldProvide) return;
+
         float refund = (dt / 1000f) * (1f - 1f / multiplier);
-
         float newBurnTime = burnTime + refund;
 
-        // Cap at the original capacity so we never "overcharge" a fuel piece.
         if (maxFuelBurnTimeField != null)
         {
             float maxBurnTime = (float)(maxFuelBurnTimeField.GetValue(Blockentity) ?? 0f);
@@ -82,9 +92,40 @@ public class BehaviorEfficientHeating : BlockEntityBehavior
     }
 
     /// <summary>
-    /// Returns true when the block entity sits inside a fully enclosed RoomRegistry room.
-    /// A single open block (exit) disables the bonus — Test Case C.
+    /// Shows live debug state when the player hovers over the heater.
     /// </summary>
+    public override void GetBlockInfo(IPlayer forPlayer, StringBuilder dsc)
+    {
+        if (sapi == null) return;
+
+        float burnTime = (float)(fuelBurnTimeField?.GetValue(Blockentity) ?? 0f);
+        bool burning   = burnTime > 0f;
+        bool inRoom    = burning && IsInValidRoom();
+        bool cooking   = inRoom  && IsActivelyUsed();
+
+        var mod = sapi.ModLoader.GetModSystem<EfficientHeatingMod>();
+        float mult = mod?.Config?.BurnTimeMultiplier ?? 2f;
+
+        dsc.AppendLine();
+        dsc.AppendLine($"[EfficientHeating on {Blockentity.GetType().Name}]");
+        if (!burning)
+        {
+            dsc.AppendLine("  Status: not burning");
+        }
+        else if (!inRoom)
+        {
+            dsc.AppendLine("  Status: no enclosed room detected — no bonus");
+        }
+        else if (cooking)
+        {
+            dsc.AppendLine("  Status: paused (cooking / smelting in progress)");
+        }
+        else
+        {
+            dsc.AppendLine($"  Status: ACTIVE — fuel lasts {mult:F2}x longer (~{1f/mult:P0} consumption)");
+        }
+    }
+
     private bool IsInValidRoom()
     {
         var roomRegistry = sapi!.ModLoader.GetModSystem<RoomRegistry>();
@@ -94,11 +135,6 @@ public class BehaviorEfficientHeating : BlockEntityBehavior
         return room != null && room.ExitCount == 0;
     }
 
-    /// <summary>
-    /// Returns true when a non-fuel item occupies any inventory slot, indicating
-    /// that the heater is actively cooking or smelting — Test Case B.
-    /// Checks via CombustibleProps: anything without a burn duration is "work", not fuel.
-    /// </summary>
     private bool IsActivelyUsed()
     {
         if (Blockentity is not IBlockEntityContainer container) return false;
@@ -108,24 +144,21 @@ public class BehaviorEfficientHeating : BlockEntityBehavior
         foreach (var slot in inv)
         {
             if (slot.Empty) continue;
-
             float burnDuration = slot.Itemstack?.Collectible?.CombustibleProps?.BurnDuration ?? 0f;
-            if (burnDuration <= 0f)
-                return true; // Non-fuel item found → heater is in use.
+            if (burnDuration <= 0f) return true;
         }
 
         return false;
     }
 
-    public override void OnBlockUnloaded()
+    private void Cleanup()
     {
-        base.OnBlockUnloaded();
-        sapi?.Event.UnregisterGameTickListener(tickListenerId);
+        if (sapi == null) return;
+        sapi.Event.UnregisterGameTickListener(tickListenerId);
+        var mod = sapi.ModLoader.GetModSystem<EfficientHeatingMod>();
+        mod?.ActiveHeaterPositions.Remove(Blockentity.Pos);
     }
 
-    public override void OnBlockRemoved()
-    {
-        base.OnBlockRemoved();
-        sapi?.Event.UnregisterGameTickListener(tickListenerId);
-    }
+    public override void OnBlockUnloaded()  { base.OnBlockUnloaded();  Cleanup(); }
+    public override void OnBlockRemoved()   { base.OnBlockRemoved();   Cleanup(); }
 }
